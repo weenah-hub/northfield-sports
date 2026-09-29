@@ -9,7 +9,9 @@
 
 import { useState, useEffect } from 'react'
 
-const API = 'http://localhost:8000'
+// In production, the API is on the same server (no localhost)
+// In development, FastAPI runs on port 8000
+const API = import.meta.env.PROD ? '' : 'http://localhost:8000'
 
 function App() {
   const [activeTab, setActiveTab] = useState('todos')
