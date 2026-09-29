@@ -1,0 +1,327 @@
+/* Simple styling for the Todo App */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #f0f2f5;
+  display: flex;
+  justify-content: center;
+  padding: 40px 16px;
+}
+
+.container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  padding: 32px;
+  width: 100%;
+  max-width: 520px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 24px;
+  color: #333;
+}
+
+/* --- Tab Navigation --- */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 8px;
+  border: none;
+  background: none;
+  font-size: 15px;
+  cursor: pointer;
+  color: #888;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: #4a90d9;
+}
+
+.tab.active {
+  color: #4a90d9;
+  border-bottom-color: #4a90d9;
+  font-weight: 600;
+}
+
+/* --- Add row (Todos) --- */
+.add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.add-row input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.add-row input:focus {
+  border-color: #4a90d9;
+}
+
+.add-row button {
+  padding: 10px 20px;
+  background: #4a90d9;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-row button:hover {
+  background: #357abd;
+}
+
+/* --- Todo list --- */
+.todo-list {
+  list-style: none;
+}
+
+.todo-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eee;
+  transition: background 0.15s;
+}
+
+.todo-list li:hover {
+  background: #f8f9fa;
+}
+
+.todo-list li label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.todo-list li input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.todo-list li.done span {
+  text-decoration: line-through;
+  color: #999;
+}
+
+/* --- Delete button --- */
+.delete {
+  background: none;
+  border: none;
+  color: #e74c3c;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.delete:hover {
+  opacity: 1;
+  background: #fdeaea;
+}
+
+.empty {
+  text-align: center;
+  color: #999;
+  margin-top: 20px;
+}
+
+.section-title {
+  text-align: center;
+  margin-bottom: 16px;
+  color: #333;
+  font-size: 20px;
+}
+
+/* ========================================
+   NOTES TAB
+   ======================================== */
+.note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.note-form input {
+  padding: 10px 14px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+}
+
+.note-form input:focus {
+  border-color: #4a90d9;
+}
+
+.note-form textarea {
+  padding: 10px 14px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.note-form textarea:focus {
+  border-color: #4a90d9;
+}
+
+.note-form button {
+  padding: 10px;
+  background: #4a90d9;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.note-form button:hover {
+  background: #357abd;
+}
+
+/* --- Notes list --- */
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.note-card {
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fafafa;
+  transition: box-shadow 0.2s;
+}
+
+.note-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.note-card h3 {
+  margin-bottom: 8px;
+  color: #333;
+  font-size: 17px;
+}
+
+.note-card p {
+  color: #555;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.note-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-edit input {
+  padding: 8px 12px;
+  border: 2px solid #4a90d9;
+  border-radius: 6px;
+  font-size: 15px;
+  outline: none;
+}
+
+.note-edit textarea {
+  padding: 8px 12px;
+  border: 2px solid #4a90d9;
+  border-radius: 6px;
+  font-size: 15px;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.note-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.note-actions button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.edit-btn {
+  background: #e8f0fe;
+  color: #4a90d9;
+}
+
+.edit-btn:hover {
+  background: #d0e2fc;
+}
+
+.delete-btn {
+  background: #fdeaea;
+  color: #e74c3c;
+}
+
+.delete-btn:hover {
+  background: #fbd5d5;
+}
+
+.save-btn {
+  background: #4a90d9;
+  color: white;
+}
+
+.save-btn:hover {
+  background: #357abd;
+}
+
+.cancel-btn {
+  background: #eee;
+  color: #666;
+}
+
+.cancel-btn:hover {
+  background: #ddd;
+}

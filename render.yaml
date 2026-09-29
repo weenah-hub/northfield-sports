@@ -1,0 +1,15 @@
+# Render deployment configuration
+# This tells Render how to build and run your app
+
+services:
+  - type: web
+    name: todo-app
+    runtime: python
+    plan: free
+    buildCommand: |
+      pip install -r backend/requirements.txt
+      cd frontend && npm install && npm run build
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
