@@ -1,15 +1,36 @@
 # Render deployment configuration
-# This tells Render how to build and run your app
+# This tells Render how to build and run the shop
 
 services:
   - type: web
-    name: todo-app
+    name: northfield-sports
     runtime: python
     plan: free
     buildCommand: |
       pip install -r backend/requirements.txt
       cd frontend && npm install && npm run build
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: cd backend && python seed.py && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
+      # Set these in the Render dashboard (or as encrypted secrets).
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: MAILGUN_API_KEY
+        sync: false
+      - key: MAILGUN_DOMAIN
+        sync: false
+      - key: MAILGUN_FROM_EMAIL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: SHOP_NAME
+        value: "Northfield Sports"

@@ -1,147 +1,230 @@
 """
-Todo List API - Backend
-=======================
-Stores todos, notes, and completed tasks.
+Shop API - Backend
+==================
+Products, Google sign-in, and order checkout for the storefront.
 Serves the React frontend in production.
 """
 
+import logging
 import os
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-app = FastAPI(title="Todo List API")
+import models  # noqa: F401  (registers tables with Base before create_all)
+from config import FRONTEND_URL, GOOGLE_CLIENT_ID, validate_settings
+from database import Base, engine, get_db
+from deps import get_current_user, get_optional_user
+from models import Order, Product, User
+from schemas import OrderCreate, OrderResponse, ProductResponse, UserResponse
+from services import auth as auth_service
+from services import email as email_service
+from services.orders import create_order, list_orders_for_user
 
-# In development, allow React's dev server to connect
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+SHOP_NAME = os.getenv("SHOP_NAME", "Northfield Sports")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create tables on boot and warn loudly about missing configuration."""
+    problems = validate_settings()
+    if problems:
+        logger.warning("Configuration problems detected:")
+        for problem in problems:
+            logger.warning("  - %s", problem)
+    else:
+        logger.info("Configuration looks complete.")
+
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database ready.")
+    yield
+
+
+app = FastAPI(title=f"{SHOP_NAME} API", lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------- In-memory storage ----------
-todos = [
-    {"id": 1, "text": "Learn FastAPI", "done": False},
-    {"id": 2, "text": "Learn React", "done": False},
-    {"id": 3, "text": "Build something cool", "done": False},
-]
-notes = [
-    {"id": 1, "title": "Welcome!", "content": "This is my first note."},
-]
-next_todo_id = 4
-next_note_id = 2
+
+# ---------- Products ----------
+
+@app.get("/api/products", response_model=list[ProductResponse])
+def list_products(
+    category: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Return the storefront catalogue, optionally filtered."""
+    query = db.query(Product)
+
+    if category and category.lower() != "all":
+        query = query.filter(Product.category == category)
+
+    if search:
+        term = f"%{search.strip()}%"
+        query = query.filter(Product.name.ilike(term) | Product.description.ilike(term))
+
+    return query.order_by(Product.id).all()
 
 
-# ---------- Data shapes ----------
-class Todo(BaseModel):
-    text: str
-    done: bool = False
+@app.get("/api/products/categories", response_model=list[str])
+def list_categories(db: Session = Depends(get_db)):
+    """Distinct categories for the filter bar."""
+    rows = db.query(Product.category).distinct().order_by(Product.category).all()
+    return [row[0] for row in rows if row[0]]
 
 
-class TodoUpdate(BaseModel):
-    text: str | None = None
-    done: bool | None = None
+@app.get("/api/products/{product_id}", response_model=ProductResponse)
+def get_product(product_id: int, db: Session = Depends(get_db)):
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
 
 
-class Note(BaseModel):
-    title: str
-    content: str
+# ---------- Auth ----------
+
+def _safe_redirect_path(candidate: str | None) -> str:
+    """Allow only same-site relative paths through, to prevent open redirects."""
+    if not candidate or not candidate.startswith("/") or candidate.startswith("//"):
+        return "/"
+    return candidate
 
 
-class NoteUpdate(BaseModel):
-    title: str | None = None
-    content: str | None = None
+@app.get("/api/auth/google")
+def google_sign_in(redirect: str = Query(default="/")):
+    """Redirect the browser to Google's consent screen."""
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=503,
+            detail="Google sign-in is not configured on this server.",
+        )
+    safe = _safe_redirect_path(redirect)
+    return RedirectResponse(auth_service.get_google_auth_url(state=safe))
 
 
-# ---------- API Endpoints ----------
+@app.get("/api/auth/google/callback")
+async def google_callback(
+    code: str = Query(...),
+    state: str = Query(default="/"),
+    db: Session = Depends(get_db),
+):
+    """Exchange the auth code, upsert the user, then hand a JWT to the SPA."""
+    try:
+        tokens = await auth_service.exchange_code_for_token(code)
+        profile = await auth_service.get_google_user_info(tokens["access_token"])
+    except Exception as exc:
+        logger.error("Google OAuth exchange failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Google sign-in failed. Please try again.")
 
-@app.get("/")
-def home():
-    return {"message": "Todo API is running!"}
+    email = profile.get("email")
+    google_id = profile.get("id")
+    if not email or not google_id:
+        raise HTTPException(
+            status_code=502,
+            detail="Google did not return an email address for this account.",
+        )
 
+    user = db.query(User).filter(User.google_id == google_id).one_or_none()
+    if user is None:
+        user = db.query(User).filter(User.email == email).one_or_none()
 
-@app.get("/todos")
-def get_all_todos():
-    return todos
+    if user is None:
+        user = User(
+            email=email,
+            name=profile.get("name") or email.split("@")[0],
+            google_id=google_id,
+        )
+        db.add(user)
+    else:
+        # Keep the profile fresh and bind the account to this Google identity.
+        user.google_id = google_id
+        if profile.get("name"):
+            user.name = profile["name"]
 
+    db.commit()
+    db.refresh(user)
 
-@app.post("/todos")
-def create_todo(todo: Todo):
-    global next_todo_id
-    new_todo = {"id": next_todo_id, "text": todo.text, "done": todo.done}
-    todos.append(new_todo)
-    next_todo_id += 1
-    return new_todo
+    jwt_token = auth_service.create_jwt_token(user.id, user.email)
+    logger.info("Signed in user %s (id=%s)", user.email, user.id)
 
-
-@app.patch("/todos/{todo_id}")
-def update_todo(todo_id: int, update: TodoUpdate):
-    for todo in todos:
-        if todo["id"] == todo_id:
-            if update.text is not None:
-                todo["text"] = update.text
-            if update.done is not None:
-                todo["done"] = update.done
-            return todo
-    return {"error": "Todo not found"}
-
-
-@app.delete("/todos/{todo_id}")
-def delete_todo(todo_id: int):
-    for i, todo in enumerate(todos):
-        if todo["id"] == todo_id:
-            todos.pop(i)
-            return {"message": "Deleted!"}
-    return {"error": "Todo not found"}
-
-
-@app.get("/completed")
-def get_completed():
-    return [t for t in todos if t["done"]]
-
-
-# ---------- Notes Endpoints ----------
-
-@app.get("/notes")
-def get_all_notes():
-    return notes
+    # The SPA reads the token from the URL, stores it, then scrubs the address bar.
+    return RedirectResponse(
+        url=f"{FRONTEND_URL}/signin-callback?token={jwt_token}"
+        f"&redirect={_safe_redirect_path(state)}"
+    )
 
 
-@app.post("/notes")
-def create_note(note: Note):
-    global next_note_id
-    new_note = {"id": next_note_id, "title": note.title, "content": note.content}
-    notes.append(new_note)
-    next_note_id += 1
-    return new_note
+@app.get("/api/auth/me", response_model=UserResponse)
+def read_me(user: User = Depends(get_current_user)):
+    return user
 
 
-@app.patch("/notes/{note_id}")
-def update_note(note_id: int, update: NoteUpdate):
-    for note in notes:
-        if note["id"] == note_id:
-            if update.title is not None:
-                note["title"] = update.title
-            if update.content is not None:
-                note["content"] = update.content
-            return note
-    return {"error": "Note not found"}
+@app.post("/api/auth/signout")
+def sign_out():
+    """Stateless JWT sign-out: the client discards the token."""
+    return {"message": "Signed out"}
 
 
-@app.delete("/notes/{note_id}")
-def delete_note(note_id: int):
-    for i, note in enumerate(notes):
-        if note["id"] == note_id:
-            notes.pop(i)
-            return {"message": "Deleted!"}
-    return {"error": "Note not found"}
+# ---------- Orders / Checkout ----------
+
+@app.post("/api/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
+def place_order(
+    payload: OrderCreate,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Checkout. Requires sign-in, prices the cart server-side, emails a receipt."""
+    order = create_order(db, user, payload)
+
+    # Receipt is sent after the response so a slow mail server never delays checkout.
+    background.add_task(email_service.send_order_confirmation, order, user.email)
+
+    logger.info("Order %s placed by user %s for $%.2f", order.id, user.id, order.total)
+    return order
+
+
+@app.get("/api/orders", response_model=list[OrderResponse])
+def get_my_orders(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return list_orders_for_user(db, user)
+
+
+@app.get("/api/orders/{order_id}", response_model=OrderResponse)
+def get_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Fetch one order. Scoped to the owner so customers cannot read each other's."""
+    order = db.get(Order, order_id)
+    if order is None or order.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+
+@app.get("/api/health")
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "ok", "shop": SHOP_NAME}
 
 
 # ---------- Serve React Frontend (Production) ----------
-# Check if the frontend build exists
 frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):
     # Serve static files (JS, CSS, images)

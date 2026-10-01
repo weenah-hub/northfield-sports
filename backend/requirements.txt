@@ -1,2 +1,8 @@
 fastapi
 uvicorn[standard]
+sqlalchemy>=2.0
+python-dotenv
+python-jose[cryptography]
+httpx
+# SQLAlchemy 2.x uses the psycopg 3 driver for postgresql:// URLs.
+psycopg[binary]
