@@ -66,17 +66,34 @@ app = FastAPI(title=f"{SHOP_NAME} API", lifespan=lifespan)
 # The login token travels in an `Authorization` header rather than a cookie, so
 # a wide-open origin cannot steal it — but leaving CORS open still lets any
 # website anyone visits use this server, and lets a page read the response.
-# In production the frontend is served by this same app, so it needs no CORS at
-# all; these entries only matter for `npm run dev` on a different port.
+#
+# Two deployment shapes are supported:
+#
+#   * Single service — FastAPI serves the built frontend, so everything is
+#     same-origin and CORS is not involved. FRONTEND_URL still needs to be set
+#     because the OAuth callback redirects the browser there.
+#   * Split (e.g. frontend on Netlify, API on Render) — the two are different
+#     origins, so CORS *does* apply and FRONTEND_URL must be the static site's
+#     address, e.g. https://northfield--sports.netlify.app
+#
+# EXTRA_ALLOWED_ORIGINS accepts a comma-separated list if the site has more
+# than one domain (Netlify gives every site both a .netlify.app subdomain and
+# a custom domain, and both are used).
 ALLOWED_ORIGINS = [
     FRONTEND_URL.rstrip("/"),
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    # Preview deployments are numbered, so allow them explicitly if listed.
+    *[
+        origin.strip().rstrip("/")
+        for origin in os.getenv("EXTRA_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ],
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin for origin in ALLOWED_ORIGINS if origin],
+    allow_origins=sorted({origin for origin in ALLOWED_ORIGINS if origin}),
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )

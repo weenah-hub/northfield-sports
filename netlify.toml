@@ -1,0 +1,46 @@
+# Netlify configuration
+# ====================
+# Publishes the static React build to Netlify.
+#
+# IMPORTANT: this deploys the FRONTEND ONLY.
+#
+# Netlify serves static files and serverless functions. It cannot run a
+# long-running FastAPI server, so the API must be hosted elsewhere (Render,
+# Fly.io, Railway, or your own machine). Set the API's address in the Netlify
+# dashboard:
+#
+#     VITE_API_URL = https://your-api.onrender.com
+#
+# Vite bakes that value into the JavaScript bundle at build time, so it must be
+# set before the build runs, not just at runtime.
+#
+# Then add your Netlify URL to the API's FRONTEND_URL so CORS allows it.
+
+[build]
+  base = "frontend"
+  command = "npm install && npm run build"
+  publish = "frontend/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# React Router serves /checkout, /orders and /order/1 as real URLs. Without
+# these redirects Netlify would look for a file called "checkout" and 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # index.html must never be cached, or browsers keep loading an old bundle
+    # that points at an old API URL after you change VITE_API_URL.
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"

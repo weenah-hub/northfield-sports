@@ -4,9 +4,21 @@
   One place that knows the backend URL and attaches the auth token.
 */
 
-// In production the API is served from the same origin (no localhost)
-// In development FastAPI runs on port 8000
-const API = import.meta.env.PROD ? '' : 'http://localhost:8000'
+// Where the API lives.
+//
+// Three cases, in order of preference:
+//
+// 1. VITE_API_URL is set  -> use it. This is what a split deployment needs,
+//    where the static site (e.g. Netlify) and the API (e.g. Render) are on
+//    different domains. Without this the browser would look for /api/products
+//    on the static host and get a 404.
+// 2. Built for production, no VITE_API_URL -> the API is on the same origin,
+//    which is how it works when FastAPI serves the built frontend itself.
+// 3. Local development -> FastAPI on port 8000.
+const API = (
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? '' : 'http://localhost:8000')
+).replace(/\/+$/, '')
 
 const TOKEN_KEY = 'shop_token'
 

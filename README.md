@@ -65,6 +65,7 @@ cd backend
 python check_google_signin.py   # is Google sign-in wired up?
 python check_mailgun.py         # will receipts actually send?
 python check_mailgun.py --send  # ...and send a test email
+python check_cors.py https://your-site.netlify.app   # split deploys only
 ```
 
 > **Note:** `--reload` watches `.py` files only. After editing `backend/.env`
@@ -256,14 +257,58 @@ frontend/src/
   AuthContext.jsx    Signed-in user
 ```
 
-## Deploying to Render
+## Deploying
 
-1. Push this project to GitHub.
-2. Render picks up `render.yaml` — it seeds the catalogue and serves the built
-   React app from FastAPI.
-3. Set the secrets marked `sync: false` in the dashboard.
-4. Update `GOOGLE_REDIRECT_URI` and `FRONTEND_URL` to your live domain, and add
-   the live callback URL to your Google OAuth client.
+The app has two halves that need different hosts:
+
+| Half | What it is | Needs |
+| --- | --- | --- |
+| `frontend/` | Static React build | Any static host (Netlify, Vercel, GitHub Pages) |
+| `backend/` | FastAPI + database + OAuth + email | A host that runs a Python server |
+
+**Netlify cannot run the backend.** It serves static files and serverless
+functions; it cannot hold a long-running FastAPI process open. So Netlify hosts
+the frontend and something like Render hosts the API.
+
+### Option A — everything on Render (simplest)
+
+FastAPI serves the built frontend itself, so there is one service and no CORS
+involved.
+
+1. Push to GitHub.
+2. Render → **New → Blueprint** → pick the repo. `render.yaml` is picked up
+   automatically; it seeds the catalogue and serves the built React app.
+3. Set the secrets marked `sync: false`.
+4. Add the live callback to your Google OAuth client, and set
+   `GOOGLE_REDIRECT_URI` and `FRONTEND_URL` to the live domain.
+
+### Option B — Netlify for the frontend, Render for the API
+
+1. Deploy the API to Render as in Option A.
+2. On Netlify: **Add new site → Import an existing project**. `netlify.toml`
+   sets the build directory and command, and adds the SPA redirect that
+   React Router needs for `/checkout` and `/orders` to work on a refresh.
+3. In Netlify's **Site configuration → Environment variables**, set:
+   ```
+   VITE_API_URL = https://your-api.onrender.com
+   ```
+   This is baked into the JavaScript at build time, so re-deploy after adding
+   it. Without it the browser looks for `/api/products` on the Netlify domain
+   and gets a 404.
+4. On the API, set `FRONTEND_URL` to the **Netlify** address (not the API's),
+   and add the API's live callback URL to your Google OAuth client.
+5. Check it:
+   ```bash
+   cd backend
+   python check_cors.py https://your-site.netlify.app
+   ```
+
+CORS is the usual failure in a split deploy: the browser blocks the request
+before it reaches the API, so it looks like the API is down when it is
+healthy. `check_cors.py` reports the allowed origins and tests them.
+
+Both a `*.netlify.app` subdomain and any custom domain count as separate
+origins. If you use both, list the extra one in `EXTRA_ALLOWED_ORIGINS`.
 
 ## Notes
 
