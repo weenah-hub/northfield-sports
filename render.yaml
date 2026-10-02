@@ -16,10 +16,17 @@ services:
       # Set these in the Render dashboard (or as encrypted secrets).
       - key: DATABASE_URL
         sync: false
+      # Supabase only. The session pooler (port 5432) is IPv4-friendly and
+      # works on every plan; the direct db.<ref> host is IPv6-only.
+      - key: SUPABASE_USE_POOLER
+        value: "true"
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      # Must be the LIVE callback, and it must also be added to the
+      # authorized redirect URIs in Google Cloud:
+      #   https://<your-app>.onrender.com/api/auth/google/callback
       - key: GOOGLE_REDIRECT_URI
         sync: false
       - key: MAILGUN_API_KEY
@@ -28,8 +35,10 @@ services:
         sync: false
       - key: MAILGUN_FROM_EMAIL
         sync: false
+      # Render generates this per service. Do not reuse the local value.
       - key: JWT_SECRET
         generateValue: true
+      # The live site URL, e.g. https://northfield-sports.onrender.com
       - key: FRONTEND_URL
         sync: false
       - key: SHOP_NAME
