@@ -17,6 +17,7 @@ export default function OrderSummary({
   tax,
   total,
   amountToFreeShipping = 0,
+  serverStockProblems = [],
   onSetQuantity,
   onRemove,
 }) {
@@ -24,10 +25,21 @@ export default function OrderSummary({
     <section className="panel summary">
       <h2 className="panel-title">Order summary</h2>
 
-      {amountToFreeShipping > 0 && (
+      {amountToFreeShipping > 0 && shipping > 0 && (
         <p className="shipping-nudge">
           Add <strong>{formatPrice(amountToFreeShipping)}</strong> more for free shipping.
         </p>
+      )}
+
+      {serverStockProblems.length > 0 && (
+        <div className="alert alert-error" role="alert">
+          <strong>Some items need attention</strong>
+          <ul className="stock-problems">
+            {serverStockProblems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <ul className="summary-lines">

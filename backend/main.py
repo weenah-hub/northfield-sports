@@ -17,14 +17,23 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 import models  # noqa: F401  (registers tables with Base before create_all)
+import pricing
 from config import FRONTEND_URL, GOOGLE_CLIENT_ID, validate_settings
 from database import Base, engine, get_db
 from deps import get_current_user, get_optional_user
 from models import Order, Product, User
-from schemas import OrderCreate, OrderResponse, ProductResponse, UserResponse
+from migrations import apply_migrations
+from schemas import (
+    OrderCreate,
+    OrderResponse,
+    ProductResponse,
+    QuoteRequest,
+    QuoteResponse,
+    UserResponse,
+)
 from services import auth as auth_service
 from services import email as email_service
-from services.orders import create_order, list_orders_for_user
+from services.orders import create_order, list_orders_for_user, quote_cart
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,17 +53,32 @@ async def lifespan(app: FastAPI):
         logger.info("Configuration looks complete.")
 
     Base.metadata.create_all(bind=engine)
+    # create_all only creates whole tables, so add any newly added columns.
+    apply_migrations(engine)
     logger.info("Database ready.")
     yield
 
 
 app = FastAPI(title=f"{SHOP_NAME} API", lifespan=lifespan)
 
+# Only the storefront is allowed to call this API.
+#
+# The login token travels in an `Authorization` header rather than a cookie, so
+# a wide-open origin cannot steal it — but leaving CORS open still lets any
+# website anyone visits use this server, and lets a page read the response.
+# In production the frontend is served by this same app, so it needs no CORS at
+# all; these entries only matter for `npm run dev` on a different port.
+ALLOWED_ORIGINS = [
+    FRONTEND_URL.rstrip("/"),
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[origin for origin in ALLOWED_ORIGINS if origin],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -179,6 +203,46 @@ def sign_out():
 
 
 # ---------- Orders / Checkout ----------
+
+@app.post("/api/orders/quote", response_model=QuoteResponse)
+def quote_order(payload: QuoteRequest, db: Session = Depends(get_db)):
+    """Price a cart for display, without saving it.
+
+    The checkout page calls this so the total it shows is the server's own
+    figure. No sign-in required: the customer has to see a price before they
+    commit to signing in.
+    """
+    quantities: dict[int, int] = {}
+    for item in payload.items:
+        quantities[item.product_id] = quantities.get(item.product_id, 0) + item.quantity
+
+    subtotal = 0.0
+    out_of_stock: list[str] = []
+    max_quantities: dict[int, int] = {}
+
+    for product_id, quantity in quantities.items():
+        product = db.get(Product, product_id)
+        if product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product {product_id} no longer exists.",
+            )
+        subtotal += product.price * quantity
+        max_quantities[product_id] = product.stock
+        if product.stock < quantity:
+            out_of_stock.append(
+                f'{product.name} — only {product.stock} left'
+                if product.stock > 0
+                else f"{product.name} is out of stock"
+            )
+
+    return QuoteResponse(
+        **quote_cart(db, QuoteRequest(items=payload.items)),
+        free_shipping_threshold=pricing.FREE_SHIPPING_THRESHOLD,
+        out_of_stock=out_of_stock,
+        max_quantities=max_quantities,
+    )
+
 
 @app.post("/api/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 def place_order(

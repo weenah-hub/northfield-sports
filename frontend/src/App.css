@@ -873,6 +873,14 @@ h1, h2, h3 {
   font-weight: 600;
 }
 
+/* Stock problems the server reported for this cart. */
+.stock-problems {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .summary-line-right {
   display: flex;
   flex-direction: column;

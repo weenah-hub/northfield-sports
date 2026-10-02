@@ -8,6 +8,9 @@
     localStorage, so a signed-out visitor can sign in and land back here.
   - Quantities are editable right here, which is why "Edit cart" stays on
     this page rather than bouncing the user back to the shop.
+  - Money comes from the server. This page sends product IDs and quantities to
+    /api/orders/quote and renders the response, so the figure on the "Place
+    order" button is the same figure that gets saved to the database.
 */
 
 import { useEffect, useState } from 'react'
@@ -18,10 +21,6 @@ import { api, beginGoogleSignIn, isSignInAvailable } from '../api'
 import { formatPrice } from '../format'
 import OrderSummary from '../components/OrderSummary'
 
-const SHIPPING_FLAT_RATE = 6.95
-const FREE_SHIPPING_THRESHOLD = 100
-const TAX_RATE = 0.0825
-
 const EMPTY_FORM = {
   shipping_name: '',
   shipping_address: '',
@@ -31,7 +30,7 @@ const EMPTY_FORM = {
 }
 
 export default function Checkout() {
-  const { lines, subtotal, itemCount, hasStockProblem, setQuantity, remove, clear } = useCart()
+  const { lines, itemCount, hasStockProblem, setQuantity, remove, clear } = useCart()
   const { user, initialising } = useAuth()
   const navigate = useNavigate()
 
@@ -45,6 +44,10 @@ export default function Checkout() {
   const [submitError, setSubmitError] = useState('')
   const [signInReady, setSignInReady] = useState(null) // null = still checking
 
+  // The server's price breakdown. Null while the first request is in flight.
+  const [quote, setQuote] = useState(null)
+  const [quoteError, setQuoteError] = useState('')
+
   // Find out up front whether Google sign-in is configured, so a misconfigured
   // server shows a clear message instead of dumping the customer on a JSON page.
   useEffect(() => {
@@ -57,10 +60,45 @@ export default function Checkout() {
     }
   }, [])
 
-  const shipping = subtotal >= FREE_SHIPPING_THRESHOLD || subtotal === 0 ? 0 : SHIPPING_FLAT_RATE
-  const tax = round2(subtotal * TAX_RATE)
-  const total = round2(subtotal + shipping + tax)
-  const amountToFreeShipping = round2(FREE_SHIPPING_THRESHOLD - subtotal)
+  // Re-price whenever the cart changes. An array of objects is a fresh
+  // reference on every render, so the cart identity is what we depend on.
+  const cartKey = lines.map((line) => `${line.productId}:${line.quantity}`).join(',')
+
+  useEffect(() => {
+    if (lines.length === 0) {
+      setQuote(null)
+      return
+    }
+
+    let cancelled = false
+    setQuoteError('')
+
+    api
+      .quoteCart(lines.map((line) => ({ product_id: line.productId, quantity: line.quantity })))
+      .then((data) => {
+        if (!cancelled) setQuote(data)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setQuote(null)
+          setQuoteError(err.message)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [cartKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const subtotal = quote?.subtotal ?? 0
+  const shipping = quote?.shipping ?? 0
+  const tax = quote?.tax ?? 0
+  const total = quote?.total ?? 0
+  const amountToFreeShipping = Math.max(0, (quote?.free_shipping_threshold ?? 0) - subtotal)
+
+  // A product may have sold out since the page loaded, or someone may be
+  // holding it in a stale cart. The server reports both.
+  const serverStockProblems = quote?.out_of_stock ?? []
 
   function updateField(field) {
     return (event) => {
@@ -94,7 +132,15 @@ export default function Checkout() {
     // Validate before anything else, so a customer is never bounced to Google
     // only to come back to the same empty form.
     if (!validate()) return
-    if (hasStockProblem) {
+
+    // Block checkout if the price could not be loaded, rather than showing a
+    // $0.00 button and quietly ordering the wrong amount.
+    if (!quote) {
+      setSubmitError(quoteError || 'We could not work out your total. Please try again.')
+      return
+    }
+
+    if (hasStockProblem || serverStockProblems.length > 0) {
       setSubmitError('Please fix the quantities highlighted below before placing your order.')
       return
     }
@@ -247,6 +293,12 @@ export default function Checkout() {
                 </p>
               </div>
 
+              {quoteError && (
+                <div className="alert alert-error" role="alert">
+                  We could not work out your total: {quoteError}
+                </div>
+              )}
+
               {submitError && (
                 <div className="alert alert-error" role="alert">
                   {submitError}
@@ -256,9 +308,13 @@ export default function Checkout() {
               <button
                 type="submit"
                 className="btn btn-primary btn-block btn-lg"
-                disabled={submitting}
+                disabled={submitting || !quote}
               >
-                {submitting ? 'Placing your order…' : `Place order · ${formatPrice(total)}`}
+                {submitting
+                  ? 'Placing your order…'
+                  : quote
+                    ? `Place order · ${formatPrice(total)}`
+                    : 'Working out your total…'}
               </button>
             </form>
           </section>
@@ -274,6 +330,7 @@ export default function Checkout() {
             tax={tax}
             total={total}
             amountToFreeShipping={amountToFreeShipping}
+            serverStockProblems={serverStockProblems}
             onSetQuantity={setQuantity}
             onRemove={remove}
           />
@@ -295,8 +352,4 @@ function Field({ label, error, className = '', ...inputProps }) {
       {error && <span className="field-error">{error}</span>}
     </label>
   )
-}
-
-function round2(value) {
-  return Math.round(value * 100) / 100
 }

@@ -48,7 +48,17 @@ class Order(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # The price breakdown, stored separately from `total`.
+    # `subtotal` is goods only; shipping and tax are added on top. Keeping each
+    # part on the order means the receipt, the order history and the customer's
+    # own confirmation screen can all show the same maths, and a later change to
+    # the shipping or tax rules cannot retroactively rewrite old orders.
+    subtotal = Column(Float, nullable=False, default=0.0)
+    shipping = Column(Float, nullable=False, default=0.0)
+    tax = Column(Float, nullable=False, default=0.0)
     total = Column(Float, nullable=False)
+
     status = Column(String(50), default="pending")  # pending, paid, shipped, delivered
     shipping_name = Column(String(255), default="")
     shipping_address = Column(Text, default="")

@@ -33,9 +33,42 @@ class ProductResponse(ProductBase):
 
 
 # ---------- Order schemas ----------
-class OrderItemCreate(BaseModel):
+
+class CartItem(BaseModel):
+    """One line in a cart: which product, and how many. No prices.
+
+    Prices are deliberately absent so a modified browser cannot influence what
+    the customer is charged. The server looks up every price itself.
+    """
+
     product_id: int
-    quantity: int = Field(gt=0)
+    quantity: int = Field(gt=0, le=100)
+
+
+class QuoteRequest(BaseModel):
+    """A cart to be priced, for display on the checkout page."""
+
+    items: list[CartItem]
+
+
+class QuoteResponse(BaseModel):
+    """The server's own price breakdown for a cart."""
+
+    subtotal: float
+    shipping: float
+    tax: float
+    total: float
+    # Sent so the page can nudge the customer toward free shipping without
+    # hardcoding a threshold that the server may change.
+    free_shipping_threshold: float
+    # Set when a line cannot be bought as it stands, so the page can warn the
+    # customer before they try to pay.
+    out_of_stock: list[str] = []
+    max_quantities: dict[int, int] = {}
+
+
+class OrderItemCreate(CartItem):
+    pass
 
 
 class OrderItemResponse(BaseModel):
@@ -60,6 +93,9 @@ class OrderCreate(BaseModel):
 
 class OrderResponse(BaseModel):
     id: int
+    subtotal: float
+    shipping: float
+    tax: float
     total: float
     status: str
     shipping_name: str

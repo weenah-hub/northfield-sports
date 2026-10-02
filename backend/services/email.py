@@ -86,6 +86,26 @@ def build_receipt_html(order) -> str:
                 </tr>
                 {''.join(rows)}
                 <tr>
+                  <td style="padding:6px 0;color:#6b7280;font-size:14px;">
+                    Subtotal
+                  </td>
+                  <td align="right" style="padding:6px 0;color:#111827;font-size:14px;">
+                    ${order.subtotal:,.2f}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;color:#6b7280;font-size:14px;">Shipping</td>
+                  <td align="right" style="padding:6px 0;color:#111827;font-size:14px;">
+                    {'Free' if order.shipping == 0 else f'${order.shipping:,.2f}'}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 0;color:#6b7280;font-size:14px;">Tax</td>
+                  <td align="right" style="padding:6px 0;color:#111827;font-size:14px;">
+                    ${order.tax:,.2f}
+                  </td>
+                </tr>
+                <tr>
                   <td align="right" style="padding:16px 0 0;color:#111827;font-size:16px;font-weight:700;">
                     Total&nbsp;&nbsp;${order.total:,.2f}
                   </td>
@@ -102,7 +122,8 @@ def build_receipt_html(order) -> str:
                 <div style="color:#4b5563;font-size:14px;line-height:1.6;">
                   {order.shipping_name}<br />
                   {order.shipping_address}<br />
-                  {order.shipping_city}, {order.shipping_zip}
+                  {order.shipping_city}, {order.shipping_zip}<br />
+                  {order.shipping_country}
                 </div>
               </div>
             </td>

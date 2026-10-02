@@ -101,6 +101,39 @@ export default function OrderConfirmation() {
             ))}
           </ul>
 
+          {/* Orders placed before the breakdown was stored have subtotal 0.
+              Showing a $0.00 subtotal next to a real total would be a lie, so
+              fall back to just the total for those. */}
+          {order.subtotal > 0 ? (
+            <dl className="totals">
+              <div className="totals-row">
+                <dt>Subtotal</dt>
+                <dd>{formatPrice(order.subtotal)}</dd>
+              </div>
+              <div className="totals-row">
+                <dt>Shipping</dt>
+                <dd>
+                  {order.shipping === 0 ? (
+                    <span className="free">Free</span>
+                  ) : (
+                    formatPrice(order.shipping)
+                  )}
+                </dd>
+              </div>
+              <div className="totals-row">
+                <dt>Tax</dt>
+                <dd>{formatPrice(order.tax)}</dd>
+              </div>
+            </dl>
+          ) : null}
+
+          <dl className="totals">
+            <div className="totals-row totals-grand">
+              <dt>Total</dt>
+              <dd>{formatPrice(order.total)}</dd>
+            </div>
+          </dl>
+
           <div className="ship-to">
             <span className="meta-label">Shipping to</span>
             <p>

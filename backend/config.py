@@ -10,18 +10,44 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ---------- Database (Neon) ----------
+# ---------- Database (Supabase, Neon, or any PostgreSQL) ----------
+# Supabase: dashboard -> Project Settings -> Database -> Connection string.
+#
+# IMPORTANT for Supabase: pick the *Session pooler* or *Transaction pooler*
+# string, not the "URI" one. The URI host (db.<ref>.supabase.co) is IPv6-only
+# and often simply will not connect from a home network. The pooler host
+# (contains "pooler.supabase.com") works over IPv4.
+#
+#   postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+#
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://user:password@host/dbname",  # Replace with your Neon URL
+    "postgresql://user:password@host/dbname",  # Replace with your database URL
 )
+
+# Set to false only if you have deliberately chosen the direct IPv6 connection.
+SUPABASE_USE_POOLER = os.getenv("SUPABASE_USE_POOLER", "true").lower() == "true"
+
+# True when the URL points at Supabase's shared pooler (either mode).
+IS_SUPABASE_POOLER = "pooler.supabase.com" in DATABASE_URL
+
+# True only for *transaction* mode (port 6543, PgBouncer). Session mode is
+# port 5432 and does support prepared statements.
+IS_SUPABASE_TRANSACTION_POOLER = IS_SUPABASE_POOLER and DATABASE_URL.endswith(":6543/postgres")
 
 # ---------- Google OAuth ----------
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+# This MUST match an "Authorized redirect URI" in the Google Cloud console,
+# character for character, or Google rejects the sign-in with
+# `redirect_uri_mismatch`.
+#
+# The /api prefix is easy to get wrong: the route is registered at
+# /api/auth/google/callback in main.py, not /auth/google/callback.
 GOOGLE_REDIRECT_URI = os.getenv(
     "GOOGLE_REDIRECT_URI",
-    "http://localhost:8000/auth/google/callback",
+    "http://localhost:8000/api/auth/google/callback",
 )
 
 # ---------- Mailgun ----------
@@ -50,8 +76,22 @@ def validate_settings() -> list[str]:
     if "user:password@host" in DATABASE_URL:
         problems.append(
             "DATABASE_URL is not set. Copy backend/.env.example to backend/.env "
-            "and paste your Neon connection string."
+            "and paste your database connection string (Supabase: Project "
+            "Settings -> Database -> Connection string -> Session pooler)."
         )
+    elif DATABASE_URL.startswith("postgresql"):
+        if "supabase" in DATABASE_URL and "pooler.supabase.com" not in DATABASE_URL:
+            problems.append(
+                "DATABASE_URL uses Supabase's direct host, which is IPv6-only "
+                "and will usually fail to connect. Use the Session pooler "
+                "string instead (host contains 'pooler.supabase.com')."
+            )
+        if "sslmode=" not in DATABASE_URL:
+            # Not fatal — database.py adds it — but worth surfacing.
+            problems.append(
+                "DATABASE_URL has no sslmode; database.py is defaulting it to "
+                "'require'. That is correct for Supabase and Neon."
+            )
 
     if not GOOGLE_CLIENT_ID:
         problems.append("GOOGLE_CLIENT_ID is missing (Google sign-in will not work).")

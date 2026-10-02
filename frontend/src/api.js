@@ -86,6 +86,16 @@ export const api = {
 
   me: () => request('/api/auth/me', { auth: true }),
 
+  /**
+   * Ask the server to price the cart.
+   *
+   * The checkout page must never work out money itself — the shipping and tax
+   * rules live on the server, so duplicating them here is how a shop ends up
+   * quoting one total and storing another. Send product IDs and quantities and
+   * render whatever comes back.
+   */
+  quoteCart: (items) => request('/api/orders/quote', { method: 'POST', body: { items } }),
+
   placeOrder: (payload) => request('/api/orders', { method: 'POST', body: payload, auth: true }),
 
   getOrder: (id) => request(`/api/orders/${id}`, { auth: true }),
