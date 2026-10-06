@@ -8,6 +8,17 @@
       name="description"
       content="Football kits, training gear and match-day essentials. Free shipping over $100."
     />
+
+    <!-- Installable as an app on a phone (PWA) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0f766e" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+    <!-- iOS ignores the manifest for the home screen icon, so it needs these -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Northfield" />
   </head>
   <body>
     <!-- React will inject the app inside this div -->
