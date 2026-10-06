@@ -386,6 +386,13 @@ if os.path.exists(frontend_dist):
     @app.get("/{full_path:path}")
     def serve_frontend(full_path: str):
         """Serve the React app for any non-API route."""
+        # An unknown API path must not fall through to the SPA. Doing that
+        # returns index.html with a 200, and a client asking for JSON gets an
+        # HTML page and a confusing "Request failed (200)" instead of learning
+        # the endpoint does not exist.
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail=f"No such endpoint: /{full_path}")
+
         file_path = os.path.join(frontend_dist, full_path)
         if os.path.isfile(file_path):
             return FileResponse(file_path)
