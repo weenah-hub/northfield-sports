@@ -98,6 +98,27 @@ export const api = {
 
   me: () => request('/api/auth/me', { auth: true }),
 
+  // ---------- Saved cart (signed in) ----------
+  //
+  // Every one of these returns the whole cart, priced by the server. The
+  // client applies the response rather than guessing at the result, so what
+  // is on screen always matches what is stored.
+
+  getCart: () => request('/api/cart', { auth: true }),
+
+  addToCart: (item) => request('/api/cart/items', { method: 'POST', body: item, auth: true }),
+
+  setCartQuantity: (productId, body) =>
+    request(`/api/cart/items/${productId}`, { method: 'PATCH', body, auth: true }),
+
+  removeCartItem: (productId) =>
+    request(`/api/cart/items/${productId}`, { method: 'DELETE', auth: true }),
+
+  clearCart: () => request('/api/cart', { method: 'DELETE', auth: true }),
+
+  mergeCart: (items) =>
+    request('/api/cart/merge', { method: 'POST', body: { items }, auth: true }),
+
   /**
    * Ask the server to price the cart.
    *

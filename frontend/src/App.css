@@ -692,12 +692,22 @@ h1, h2, h3 {
 .product-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 12px 16px 16px;
 }
 
 .add-btn {
   flex: 1;
+}
+
+/* Shown when adding to the cart failed, e.g. stock ran out. */
+.add-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 /* ---------- 7. Checkout page ---------- */

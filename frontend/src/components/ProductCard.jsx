@@ -12,12 +12,15 @@ export default function ProductCard({ product }) {
   const { add } = useCart()
   const [quantity, setQuantity] = useState(1)
   const [justAdded, setJustAdded] = useState(false)
+  const [addError, setAddError] = useState('')
 
   const soldOut = product.stock === 0
   const inCart = product.stock > 0
 
-  function handleAdd() {
-    add(product.id, quantity)
+  async function handleAdd() {
+    setAddError('')
+    const added = await add(product.id, quantity)
+    if (!added) return // the cart shows the reason, e.g. "Only 5 left of ..."
     setJustAdded(true)
     setTimeout(() => setJustAdded(false), 1400)
   }
@@ -66,6 +69,12 @@ export default function ProductCard({ product }) {
         <button className="btn btn-primary add-btn" onClick={handleAdd} disabled={soldOut}>
           {justAdded ? 'Added ✓' : soldOut ? 'Sold out' : 'Add to cart'}
         </button>
+
+        {addError && (
+          <span className="add-error" role="alert">
+            {addError}
+          </span>
+        )}
       </div>
     </article>
   )
