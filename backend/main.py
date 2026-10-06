@@ -24,6 +24,9 @@ from deps import get_current_user, get_optional_user
 from models import Order, Product, User
 from migrations import apply_migrations
 from schemas import (
+    CartItemCreate,
+    CartQuantityUpdate,
+    MergeRequest,
     OrderCreate,
     OrderResponse,
     ProductResponse,
@@ -32,6 +35,7 @@ from schemas import (
     UserResponse,
 )
 from services import auth as auth_service
+from services import cart as cart_service
 from services import email as email_service
 from services.orders import create_order, list_orders_for_user, quote_cart
 
@@ -217,6 +221,74 @@ def read_me(user: User = Depends(get_current_user)):
 def sign_out():
     """Stateless JWT sign-out: the client discards the token."""
     return {"message": "Signed out"}
+
+
+# ---------- Cart ----------
+#
+# The saved cart, shared by every client (website, phone, anything else) for
+# the signed-in customer. This is what makes a change on one device appear on
+# another: both clients read and write the same rows.
+
+@app.get("/api/cart")
+def read_cart(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return the cart with live prices, totals and any stock problems."""
+    return cart_service.cart_payload(db, user)
+
+
+@app.post("/api/cart/items")
+def add_to_cart(
+    payload: CartItemCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Add a product to the cart, or increase an existing line."""
+    cart_service.add_item(db, user, payload.product_id, payload.quantity)
+    return cart_service.cart_payload(db, user)
+
+
+@app.patch("/api/cart/items/{product_id}")
+def update_cart_item(
+    product_id: int,
+    payload: CartQuantityUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set an exact quantity. A quantity of 0 removes the line."""
+    cart_service.set_quantity(db, user, product_id, payload.quantity)
+    return cart_service.cart_payload(db, user)
+
+
+@app.delete("/api/cart/items/{product_id}")
+def remove_from_cart(
+    product_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove one product from the cart."""
+    cart_service.remove_item(db, user, product_id)
+    return cart_service.cart_payload(db, user)
+
+
+@app.delete("/api/cart")
+def empty_cart(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Empty the whole cart."""
+    removed = cart_service.clear_cart(db, user)
+    return {"removed": removed, **cart_service.cart_payload(db, user)}
+
+
+@app.post("/api/cart/merge")
+def merge_guest_cart(
+    payload: MergeRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Fold a guest cart (from localStorage) into the account's cart on sign-in.
+
+    Additive: quantities are summed and clamped to stock rather than replacing
+    what was already saved, so nothing the customer picked is lost.
+    """
+    result = cart_service.merge_cart(db, user, [i.model_dump() for i in payload.items])
+    return {**result, **cart_service.cart_payload(db, user)}
 
 
 # ---------- Orders / Checkout ----------

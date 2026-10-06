@@ -71,6 +71,27 @@ class OrderItemCreate(CartItem):
     pass
 
 
+# ---------- Cart schemas ----------
+
+class CartItemCreate(BaseModel):
+    """Add a product to the saved cart. No price is accepted."""
+
+    product_id: int
+    quantity: int = Field(default=1, gt=0, le=99)
+
+
+class CartQuantityUpdate(BaseModel):
+    """Set an exact quantity. Zero removes the line."""
+
+    quantity: int = Field(ge=0, le=99)
+
+
+class MergeRequest(BaseModel):
+    """A guest cart to fold into the account's cart after signing in."""
+
+    items: list[CartItemCreate] = []
+
+
 class OrderItemResponse(BaseModel):
     id: int
     product_id: int
